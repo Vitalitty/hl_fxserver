@@ -1,0 +1,12 @@
+{
+  "name": "hl-fxserver",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-fxserver-versions.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

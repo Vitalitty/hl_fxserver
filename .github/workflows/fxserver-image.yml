@@ -1,0 +1,158 @@
+name: Update and publish FXServer image
+
+on:
+  schedule:
+    - cron: "28 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: Publish the currently tracked channels even when no version changed
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - Dockerfile
+      - data/fxserver-versions.json
+      - scripts/**
+      - test/**
+      - .github/workflows/fxserver-image.yml
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: fxserver-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Check Cfx.re versions
+    runs-on: ubuntu-latest
+    outputs:
+      commit_sha: ${{ steps.commit.outputs.commit_sha }}
+      publish_requested: ${{ steps.decision.outputs.publish_requested }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Test version checker
+        run: node --test
+
+      - name: Check artifact index
+        id: check
+        run: node scripts/check-fxserver-versions.mjs --write
+
+      - name: Commit version changes
+        id: commit
+        env:
+          LATEST_VERSION: ${{ steps.check.outputs.latest_version }}
+          RECOMMENDED_VERSION: ${{ steps.check.outputs.recommended_version }}
+        run: |
+          if [[ "${{ steps.check.outputs.changed }}" == "true" ]]; then
+            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add -- Dockerfile data/fxserver-versions.json
+            git commit -m "[Auto] FXServer latest=${LATEST_VERSION} recommended=${RECOMMENDED_VERSION}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create immutable latest-version tag
+        if: steps.check.outputs.latest_changed == 'true'
+        env:
+          LATEST_VERSION: ${{ steps.check.outputs.latest_version }}
+        run: |
+          git fetch --tags --force
+          if git show-ref --tags --verify --quiet "refs/tags/${LATEST_VERSION}"; then
+            echo "Tag ${LATEST_VERSION} already exists; leaving it unchanged."
+          else
+            git tag "${LATEST_VERSION}"
+            git push origin "refs/tags/${LATEST_VERSION}"
+          fi
+
+      - name: Decide whether to publish
+        id: decision
+        env:
+          FORCE_PUBLISH: ${{ inputs.force_publish || 'false' }}
+        run: |
+          publish=false
+          if [[ "${{ steps.check.outputs.changed }}" == "true" \
+             || "${{ github.event_name }}" == "push" \
+             || "${FORCE_PUBLISH}" == "true" ]]; then
+            publish=true
+          fi
+          echo "publish_requested=${publish}" >> "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare channel builds
+    needs: update
+    if: needs.update.outputs.publish_requested == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout resolved version state
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.update.outputs.commit_sha }}
+
+      - name: Create build matrix
+        id: matrix
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: node scripts/create-build-matrix.mjs
+
+  publish:
+    name: Publish ${{ matrix.channel }}
+    needs:
+      - update
+      - prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout resolved version state
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.update.outputs.commit_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            FXSERVER_ARTIFACT_URL=${{ matrix.url }}
+          tags: ${{ matrix.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.update.outputs.commit_sha }}
+            org.opencontainers.image.version=${{ matrix.channel }}
+          cache-from: type=gha,scope=${{ matrix.channel }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.channel }}
