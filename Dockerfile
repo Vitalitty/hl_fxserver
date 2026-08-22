@@ -1,4 +1,4 @@
-FROM alpine:3.22 AS download
+FROM alpine:3.24 AS download
 
 ARG FXSERVER_ARTIFACT_URL=https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/35265-f26e3aacb0f6fe8a8c76227a79688b0853dadb45/fx.tar.xz
 
