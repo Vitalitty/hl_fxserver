@@ -1,8 +1,8 @@
 {
   "source": "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/",
   "latest": {
-    "version": "35407",
-    "url": "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/35407-7f51949ada32dc20f5ffc3e5142d3ec96da517e9/fx.tar.xz"
+    "version": "35419",
+    "url": "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/35419-ebbf1487d9b4f8437dbff20677d4f2c907f7c999/fx.tar.xz"
   },
   "recommended": {
     "version": "35245",
