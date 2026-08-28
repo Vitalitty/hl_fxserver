@@ -11,16 +11,19 @@ The workflow in `.github/workflows/fxserver-image.yml` runs at minute 28 of ever
 3. records `latest`, `recommended`, and `optional` when available;
 4. updates the Dockerfile's pinned default artifact;
 5. commits changed state and creates an immutable numeric Git tag for a new latest build;
-6. publishes channel images to `ghcr.io/<owner>/<repository>`.
+6. publishes changed channels to `ghcr.io/<owner>/<repository>`; repository
+   pushes and forced manual runs rebuild every available channel.
 
 Published container tags are:
 
 - `<build-number>` and `latest` for the newest artifact;
-- `recommended` for the Cfx.re recommended artifact;
+- `<build-number>` and `recommended` for the Cfx.re recommended artifact;
 - `optional` only while Cfx.re provides an optional artifact.
 
 The parser does not assume that optional exists, and it keeps `latest` separate from `recommended`.
 If Cfx.re removes the optional channel, the workflow stops updating that alias; it does not delete an older `optional` tag from GHCR.
+An hourly run publishes nothing when no channel changed. When only one channel
+changes, unchanged channels are not rebuilt or pushed.
 
 ## GitHub setup
 

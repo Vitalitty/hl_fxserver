@@ -33,10 +33,15 @@ Maintain a self-contained Docker image repository for the Linux FXServer artifac
 6. Publish images in the same workflow because pushes made with `GITHUB_TOKEN` do not trigger another workflow.
 7. Publish to `ghcr.io/<owner>/<repository>` using `GITHUB_TOKEN`:
    - tracked latest artifact: `<version>` and `latest`
-   - tracked recommended artifact: `recommended`
+   - tracked recommended artifact: `<version>` and `recommended`
    - tracked optional artifact, when present: `optional`
-8. Build only `linux/amd64`, matching the downloaded FXServer artifact.
-9. Use workflow concurrency to prevent overlapping state updates.
+8. On scheduled artifact checks, publish only channels whose resolved artifact
+   changed. A missing optional artifact is not publishable and must not create an
+   empty build matrix.
+9. On automation-related pushes and forced manual runs, publish every available
+   channel so Dockerfile and automation changes reach all mutable tags.
+10. Build only `linux/amd64`, matching the downloaded FXServer artifact.
+11. Use workflow concurrency to prevent overlapping state updates.
 
 ## Parser and test requirements
 
@@ -50,6 +55,8 @@ Maintain a self-contained Docker image repository for the Linux FXServer artifac
   - a combined `LATEST RECOMMENDED` label with no optional build;
   - malformed or foreign artifact links;
   - failure when required channels are missing.
+- Test build-matrix selection, numeric recommended tags, full forced
+  publication, and deduplication when channels share an artifact.
 
 ## Validation
 
