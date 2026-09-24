@@ -7,13 +7,11 @@ export function selectChannels({
   publishAll = false,
   latestChanged = false,
   recommendedChanged = false,
-  optionalChanged = false,
 } = {}) {
   const all = isTrue(publishAll);
   return {
     latest: all || isTrue(latestChanged),
     recommended: all || isTrue(recommendedChanged),
-    optional: all || isTrue(optionalChanged),
   };
 }
 
@@ -50,7 +48,6 @@ export function createBuildMatrix(state, rawImage, selectedChannels) {
     state.recommended.version,
     'recommended',
   ]);
-  addChannel('optional', state.optional, ['optional']);
 
   return {
     include: [...buildsByUrl.values()].map((build) => ({
@@ -68,7 +65,6 @@ function main() {
     publishAll: process.env.PUBLISH_ALL,
     latestChanged: process.env.LATEST_CHANGED,
     recommendedChanged: process.env.RECOMMENDED_CHANGED,
-    optionalChanged: process.env.OPTIONAL_CHANGED,
   });
   const matrix = createBuildMatrix(state, process.env.IMAGE, selectedChannels);
 

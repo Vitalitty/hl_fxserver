@@ -1,14 +1,15 @@
 # HL FXServer
 
-A small Linux Docker image for Cfx.re FXServer, usable for FiveM or RedM. The repository checks the official artifact index hourly, tracks the latest and labeled release channels, and publishes images to GitHub Container Registry (GHCR).
+A small Linux Docker image for Cfx.re FXServer, usable for FiveM or RedM. The repository checks the official Server Download page hourly, tracks its latest and recommended Linux branches, and publishes images to GitHub Container Registry (GHCR).
 
 ## Automation
 
 The workflow in `.github/workflows/fxserver-image.yml` runs at minute 28 of every hour. It:
 
 1. tests the parser;
-2. reads the Cfx.re Linux artifact index;
-3. records `latest`, `recommended`, and `optional` when available;
+2. reads the legacy Linux `latest` and `recommended` channel data used by the
+   Cfx.re Server Download page;
+3. records both channel versions and validated archive URLs;
 4. updates the Dockerfile's pinned default artifact;
 5. commits changed state and creates an immutable numeric Git tag for a new latest build;
 6. publishes changed channels to `ghcr.io/<owner>/<repository>`; repository
@@ -17,11 +18,10 @@ The workflow in `.github/workflows/fxserver-image.yml` runs at minute 28 of ever
 Published container tags are:
 
 - `<build-number>` and `latest` for the newest artifact;
-- `<build-number>` and `recommended` for the Cfx.re recommended artifact;
-- `optional` only while Cfx.re provides an optional artifact.
+- `<build-number>` and `recommended` for the Cfx.re recommended artifact.
 
-The parser does not assume that optional exists, and it keeps `latest` separate from `recommended`.
-If Cfx.re removes the optional channel, the workflow stops updating that alias; it does not delete an older `optional` tag from GHCR.
+The checker keeps `latest` separate from `recommended`, because Cfx.re can
+recommend an older build than the newest available artifact.
 An hourly run publishes nothing when no channel changed. When only one channel
 changes, unchanged channels are not rebuilt or pushed.
 
