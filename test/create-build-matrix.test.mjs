@@ -10,7 +10,6 @@ const image = 'ghcr.io/Owner/Repository';
 const state = {
   latest: { version: '300', url: 'https://example.test/300/fx.tar.xz' },
   recommended: { version: '250', url: 'https://example.test/250/fx.tar.xz' },
-  optional: { version: '200', url: 'https://example.test/200/fx.tar.xz' },
 };
 
 test('selects only changed channels for a scheduled update', () => {
@@ -52,7 +51,7 @@ test('selects all available channels for a forced publication', () => {
 
   assert.deepEqual(
     matrix.include.map((entry) => entry.channel),
-    ['latest', 'recommended', 'optional'],
+    ['latest', 'recommended'],
   );
 });
 

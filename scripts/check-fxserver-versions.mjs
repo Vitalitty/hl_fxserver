@@ -7,9 +7,13 @@ import {
 import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_ARTIFACTS_URL =
+  'https://docs.fivem.net/docs/server-download/?platform=legacy&os=linux';
+
+export const FXSERVER_ARCHIVES_URL =
   'https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/';
 
 const ARCHIVE_PATH_PATTERN = /\/(\d+)-([0-9a-f]{40})\/fx\.tar\.xz$/i;
+const BUILD_SUBTITLE_PATTERN = /^build\s+(\d+)$/i;
 
 function readAttribute(attributes, name) {
   const match = attributes.match(
@@ -19,28 +23,19 @@ function readAttribute(attributes, name) {
   return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
 }
 
-function decodeAttribute(value) {
-  return value
-    .replaceAll('&amp;', '&')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'");
-}
+function artifactFromDownloadUrl(rawUrl) {
+  const archiveBase = new URL(FXSERVER_ARCHIVES_URL);
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
 
-function readableText(html) {
-  return html
-    .replace(/<[^>]*>/g, ' ')
-    .replaceAll('&nbsp;', ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-}
-
-function artifactFromHref(rawHref, sourceUrl) {
-  const source = new URL(sourceUrl);
-  const href = decodeAttribute(rawHref);
-  const url = new URL(href, source);
-
-  if (url.origin !== source.origin || !url.pathname.startsWith(source.pathname)) {
+  if (
+    url.origin !== archiveBase.origin ||
+    !url.pathname.startsWith(archiveBase.pathname)
+  ) {
     return null;
   }
 
@@ -55,64 +50,98 @@ function artifactFromHref(rawHref, sourceUrl) {
   };
 }
 
-function setLabeledChannel(current, candidate, channel) {
-  if (current && current.url !== candidate.url) {
-    throw new Error(`Artifact index contains multiple ${channel} builds`);
+function artifactFromEntry(entry, channel) {
+  if (typeof entry?.downloadURL !== 'string') {
+    return null;
   }
 
-  return candidate;
+  const artifact = artifactFromDownloadUrl(entry.downloadURL);
+  if (!artifact) {
+    return null;
+  }
+
+  const subtitle =
+    typeof entry.subtitle === 'string'
+      ? entry.subtitle.trim().match(BUILD_SUBTITLE_PATTERN)
+      : null;
+  if (!subtitle) {
+    throw new Error(`${channel} artifact does not have a numeric build subtitle`);
+  }
+  if (subtitle[1] !== artifact.version) {
+    throw new Error(
+      `${channel} build subtitle ${subtitle[1]} does not match archive build ${artifact.version}`,
+    );
+  }
+
+  return artifact;
 }
 
-export function parseArtifactIndex(html, sourceUrl = DEFAULT_ARTIFACTS_URL) {
-  const source = new URL(sourceUrl).href;
-  const archivesByVersion = new Map();
-  let recommended = null;
-  let optional = null;
-
-  for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
-    const href = readAttribute(match[1], 'href');
-    if (!href) {
-      continue;
-    }
-
-    const artifact = artifactFromHref(href, source);
-    if (!artifact) {
-      continue;
-    }
-
-    const existing = archivesByVersion.get(artifact.version);
-    if (existing && existing.url !== artifact.url) {
-      throw new Error(`Artifact index contains conflicting URLs for build ${artifact.version}`);
-    }
-    archivesByVersion.set(artifact.version, artifact);
-
-    const label = readableText(match[2]);
-    if (label.includes('RECOMMENDED')) {
-      recommended = setLabeledChannel(recommended, artifact, 'recommended');
-    }
-    if (label.includes('OPTIONAL')) {
-      optional = setLabeledChannel(optional, artifact, 'optional');
-    }
+function addArchive(archivesByVersion, artifact) {
+  const existing = archivesByVersion.get(artifact.version);
+  if (existing && existing.url !== artifact.url) {
+    throw new Error(
+      `Server Download page contains conflicting URLs for build ${artifact.version}`,
+    );
   }
 
+  archivesByVersion.set(artifact.version, artifact);
+}
+
+function selectLatest(archivesByVersion, channel) {
   const archives = [...archivesByVersion.values()];
   if (archives.length === 0) {
-    throw new Error('Artifact index does not contain any valid FXServer archives');
+    throw new Error(`Server Download page does not identify a valid ${channel} build`);
   }
 
-  const latest = archives.reduce((selected, candidate) =>
+  return archives.reduce((selected, candidate) =>
     BigInt(candidate.version) > BigInt(selected.version) ? candidate : selected,
   );
+}
 
-  if (!recommended) {
-    throw new Error('Artifact index does not identify a recommended FXServer build');
+function readNextData(html) {
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (readAttribute(match[1], 'id') === '__NEXT_DATA__') {
+      try {
+        return JSON.parse(match[2]);
+      } catch {
+        throw new Error('Server Download page contains invalid __NEXT_DATA__ JSON');
+      }
+    }
   }
+
+  throw new Error('Server Download page does not contain __NEXT_DATA__');
+}
+
+function readChannelArtifacts(legacy, channel) {
+  const entries = legacy?.[channel]?.linux;
+  const artifactsByVersion = new Map();
+
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const artifact = artifactFromEntry(entry, channel);
+    if (artifact) {
+      addArchive(artifactsByVersion, artifact);
+    }
+  }
+
+  return artifactsByVersion;
+}
+
+export function parseServerDownloadPage(html, sourceUrl = DEFAULT_ARTIFACTS_URL) {
+  const source = new URL(sourceUrl).href;
+  const nextData = readNextData(html);
+  const legacy = nextData?.props?.pageProps?.legacy;
+  const latest = selectLatest(readChannelArtifacts(legacy, 'latest'), 'latest');
+  const recommendedArtifacts = readChannelArtifacts(legacy, 'recommended');
+
+  if (recommendedArtifacts.size > 1) {
+    throw new Error('Server Download page identifies multiple recommended builds');
+  }
+  const recommended = selectLatest(recommendedArtifacts, 'recommended');
 
   return {
     source,
     latest,
     recommended,
-    optional,
   };
 }
 
@@ -128,7 +157,6 @@ export function compareStates(previous, next) {
   const changes = {
     latest: !sameChannel(previous?.latest ?? null, next.latest),
     recommended: !sameChannel(previous?.recommended ?? null, next.recommended),
-    optional: !sameChannel(previous?.optional ?? null, next.optional),
   };
 
   return {
@@ -136,8 +164,7 @@ export function compareStates(previous, next) {
     changed:
       previous?.source !== next.source ||
       changes.latest ||
-      changes.recommended ||
-      changes.optional,
+      changes.recommended,
   };
 }
 
@@ -192,7 +219,7 @@ async function loadHtml(options) {
     },
   });
   if (!response.ok) {
-    throw new Error(`Artifact index request failed with HTTP ${response.status}`);
+    throw new Error(`Server Download page request failed with HTTP ${response.status}`);
   }
 
   return response.text();
@@ -207,13 +234,10 @@ function writeActionsOutputs(state, changes) {
     changed: changes.changed,
     latest_changed: changes.latest,
     recommended_changed: changes.recommended,
-    optional_changed: changes.optional,
     latest_version: state.latest.version,
     latest_url: state.latest.url,
     recommended_version: state.recommended.version,
     recommended_url: state.recommended.url,
-    optional_version: state.optional?.version ?? '',
-    optional_url: state.optional?.url ?? '',
   };
 
   const output = Object.entries(values)
@@ -225,7 +249,7 @@ function writeActionsOutputs(state, changes) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const html = await loadHtml(options);
-  const state = parseArtifactIndex(html, options.source);
+  const state = parseServerDownloadPage(html, options.source);
   const previous = existsSync(options.state)
     ? JSON.parse(readFileSync(options.state, 'utf8'))
     : null;
@@ -247,7 +271,7 @@ async function main() {
     console.log(JSON.stringify({ state, changes }, null, 2));
   } else {
     console.log(
-      `latest=${state.latest.version} recommended=${state.recommended.version} optional=${state.optional?.version ?? 'none'} changed=${changes.changed}`,
+      `latest=${state.latest.version} recommended=${state.recommended.version} changed=${changes.changed}`,
     );
   }
 }

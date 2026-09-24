@@ -39,7 +39,6 @@ jobs:
       publish_all: ${{ steps.decision.outputs.publish_all }}
       latest_changed: ${{ steps.check.outputs.latest_changed }}
       recommended_changed: ${{ steps.check.outputs.recommended_changed }}
-      optional_changed: ${{ steps.check.outputs.optional_changed }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -55,7 +54,7 @@ jobs:
       - name: Test version checker
         run: node --test
 
-      - name: Check artifact index
+      - name: Check Server Download page
         id: check
         run: node scripts/check-fxserver-versions.mjs --write
 
@@ -94,8 +93,6 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           LATEST_CHANGED: ${{ steps.check.outputs.latest_changed }}
           RECOMMENDED_CHANGED: ${{ steps.check.outputs.recommended_changed }}
-          OPTIONAL_CHANGED: ${{ steps.check.outputs.optional_changed }}
-          OPTIONAL_VERSION: ${{ steps.check.outputs.optional_version }}
         run: |
           publish_all=false
           if [[ "${EVENT_NAME}" == "push" || "${FORCE_PUBLISH}" == "true" ]]; then
@@ -104,8 +101,7 @@ jobs:
 
           publish_requested=${publish_all}
           if [[ "${LATEST_CHANGED}" == "true" \
-             || "${RECOMMENDED_CHANGED}" == "true" \
-             || ( "${OPTIONAL_CHANGED}" == "true" && -n "${OPTIONAL_VERSION}" ) ]]; then
+             || "${RECOMMENDED_CHANGED}" == "true" ]]; then
             publish_requested=true
           fi
 
@@ -132,7 +128,6 @@ jobs:
           PUBLISH_ALL: ${{ needs.update.outputs.publish_all }}
           LATEST_CHANGED: ${{ needs.update.outputs.latest_changed }}
           RECOMMENDED_CHANGED: ${{ needs.update.outputs.recommended_changed }}
-          OPTIONAL_CHANGED: ${{ needs.update.outputs.optional_changed }}
         run: node scripts/create-build-matrix.mjs
 
   publish:

@@ -4,79 +4,96 @@ import { readFileSync } from 'node:fs';
 
 import {
   compareStates,
-  parseArtifactIndex,
+  parseServerDownloadPage,
   updateDockerfileArtifact,
 } from '../scripts/check-fxserver-versions.mjs';
 
-const source = 'https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/';
+const source =
+  'https://docs.fivem.net/docs/server-download/?platform=legacy&os=linux';
+const archives =
+  'https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/';
 const hash = (character) => character.repeat(40);
-const archive = (version, character) =>
-  `./${version}-${hash(character)}/fx.tar.xz`;
+const archiveUrl = (version, character) =>
+  `${archives}${version}-${hash(character)}/fx.tar.xz`;
+const entry = (version, character) => ({
+  displayName: 'fx.tar.xz',
+  subtitle: `build ${version}`,
+  downloadURL: archiveUrl(version, character),
+});
+const page = ({ latest = [], recommended = [] }) =>
+  `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+    props: {
+      pageProps: {
+        legacy: {
+          latest: { linux: latest },
+          recommended: { linux: recommended },
+        },
+      },
+    },
+  })}</script>`;
 
-test('parses independent latest, recommended, and optional channels', () => {
+test('reads latest and recommended from the Server Download page data', () => {
   const html = readFileSync(
-    new URL('./fixtures/separate-channels.html', import.meta.url),
+    new URL('./fixtures/server-download.html', import.meta.url),
     'utf8',
   );
 
-  const state = parseArtifactIndex(html, source);
-  assert.equal(state.latest.version, '103');
-  assert.equal(state.recommended.version, '102');
-  assert.equal(state.optional.version, '101');
+  const state = parseServerDownloadPage(html, source);
+  assert.deepEqual(state, {
+    source,
+    latest: {
+      version: '35945',
+      url: archiveUrl('35945', 'c'),
+    },
+    recommended: {
+      version: '35245',
+      url: archiveUrl('35245', 'b'),
+    },
+  });
 });
 
-test('accepts a combined latest recommended label without optional', () => {
-  const html = readFileSync(
-    new URL('./fixtures/current.html', import.meta.url),
-    'utf8',
-  );
+test('rejects a displayed build number that does not match its archive URL', () => {
+  const mismatched = entry('500', 'a');
+  mismatched.subtitle = 'build 501';
 
-  const state = parseArtifactIndex(html, source);
-  assert.equal(state.latest.version, '202');
-  assert.equal(state.recommended.version, '201');
-  assert.equal(state.optional, null);
-});
-
-test('ignores malformed and foreign archive links', () => {
-  const html = `
-    <a href="https://example.com/999-${hash('f')}/fx.tar.xz">OPTIONAL</a>
-    <a href="./998-not-a-commit/fx.tar.xz">998</a>
-    <a href="${archive(300, 'a')}">RECOMMENDED (300)</a>
-    <a href="${archive(301, 'b')}">301</a>
-  `;
-
-  const state = parseArtifactIndex(html, source);
-  assert.equal(state.latest.version, '301');
-  assert.equal(state.recommended.version, '300');
-  assert.equal(state.optional, null);
-});
-
-test('fails safely when a required channel is missing', () => {
-  const html = `<a href="${archive(400, 'a')}">400</a>`;
   assert.throws(
-    () => parseArtifactIndex(html, source),
-    /does not identify a recommended FXServer build/,
+    () =>
+      parseServerDownloadPage(
+        page({ latest: [mismatched], recommended: [entry('400', 'b')] }),
+        source,
+      ),
+    /subtitle 501 does not match archive build 500/,
   );
 });
 
-test('compares nullable channels and rewrites the pinned Docker argument', () => {
+test('fails safely when either required channel is missing', () => {
+  assert.throws(
+    () =>
+      parseServerDownloadPage(page({ recommended: [entry('400', 'a')] }), source),
+    /does not identify a valid latest build/,
+  );
+  assert.throws(
+    () => parseServerDownloadPage(page({ latest: [entry('500', 'b')] }), source),
+    /does not identify a valid recommended build/,
+  );
+});
+
+test('compares channels and rewrites the pinned Docker argument', () => {
   const state = {
     source,
-    latest: { version: '2', url: `${source}${archive(2, 'a').slice(2)}` },
-    recommended: { version: '1', url: `${source}${archive(1, 'b').slice(2)}` },
-    optional: null,
+    latest: { version: '2', url: archiveUrl('2', 'a') },
+    recommended: { version: '1', url: archiveUrl('1', 'b') },
   };
 
   assert.deepEqual(compareStates(state, structuredClone(state)), {
     latest: false,
     recommended: false,
-    optional: false,
     changed: false,
   });
 
   const changed = structuredClone(state);
-  changed.optional = { version: '1', url: state.recommended.url };
-  assert.equal(compareStates(state, changed).optional, true);
+  changed.recommended = structuredClone(state.latest);
+  assert.equal(compareStates(state, changed).recommended, true);
 
   assert.equal(
     updateDockerfileArtifact(
