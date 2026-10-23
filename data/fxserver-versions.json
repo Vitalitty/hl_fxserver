@@ -1,8 +1,8 @@
 {
   "source": "https://docs.fivem.net/docs/server-download/?platform=legacy&os=linux",
   "latest": {
-    "version": "37692",
-    "url": "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/37692-ccd92212b96d4633897450940a57dc61dc2bc5b2/fx.tar.xz"
+    "version": "37850",
+    "url": "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/37850-46de79bc1d4dd7c64f16c5cfbadf94612b5ab3d9/fx.tar.xz"
   },
   "recommended": {
     "version": "35245",
