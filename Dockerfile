@@ -1,6 +1,6 @@
 FROM alpine:3.24 AS download
 
-ARG FXSERVER_ARTIFACT_URL=https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/37872-0cfcdb5ead57a4a26fcb6ebad98adbcd0273e607/fx.tar.xz
+ARG FXSERVER_ARTIFACT_URL=https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/38004-6381a41391cb21e66979af7a280201644bbd6760/fx.tar.xz
 
 RUN apk add --no-cache ca-certificates curl tar xz
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
