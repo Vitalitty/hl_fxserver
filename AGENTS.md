@@ -61,6 +61,8 @@ Maintain a self-contained Docker image repository for the Linux FXServer artifac
   - failure when required channels are missing.
 - Test build-matrix selection, numeric recommended tags, full forced
   publication, and deduplication when channels share an artifact.
+- When channels share an artifact, use a comma-free cache scope even if the
+  human-readable matrix channel lists both channel names.
 
 ## Validation
 

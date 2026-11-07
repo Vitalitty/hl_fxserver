@@ -20,6 +20,7 @@ test('selects only changed channels for a scheduled update', () => {
     include: [
       {
         channel: 'latest',
+        cache_scope: 'latest',
         url: state.latest.url,
         tags: [
           'ghcr.io/owner/repository:300',
@@ -36,6 +37,7 @@ test('publishes numeric and channel tags for a changed recommended build', () =>
 
   assert.equal(matrix.include.length, 1);
   assert.equal(matrix.include[0].channel, 'recommended');
+  assert.equal(matrix.include[0].cache_scope, 'recommended');
   assert.equal(
     matrix.include[0].tags,
     [
@@ -66,6 +68,7 @@ test('deduplicates builds and tags when selected channels share an artifact', ()
 
   assert.equal(matrix.include.length, 1);
   assert.equal(matrix.include[0].channel, 'latest,recommended');
+  assert.equal(matrix.include[0].cache_scope, 'latest-recommended');
   assert.equal(
     matrix.include[0].tags,
     [

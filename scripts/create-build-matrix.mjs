@@ -52,6 +52,7 @@ export function createBuildMatrix(state, rawImage, selectedChannels) {
   return {
     include: [...buildsByUrl.values()].map((build) => ({
       channel: build.channels.join(','),
+      cache_scope: build.channels.join('-'),
       url: build.url,
       tags: [...build.tags].join('\n'),
     })),
